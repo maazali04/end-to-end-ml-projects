@@ -1,39 +1,17 @@
-from pathlib import Path
-import joblib
-import pandas as pd
+import os
+import requests
 import streamlit as st
 
-from custom_transformers import (
-    AgeImputer,
-    CabinImputer,
-    EmbarkedImputer,
-    LogFareTransformer,
-    TicketImputer,
-    UniversalBackupImputer,
-)
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/predict")
 
 st.set_page_config(
     page_title="Titanic Survival Predictor", page_icon="🚢", layout="centered"
 )
 
-st.title("🚢 Titanic Passenger Survival Predictor")
+st.title("Titanic Passenger Survival Predictor")
 st.write(
     "Enter passenger details below to predict whether they would have survived the Titanic disaster."
 )
-
-
-@st.cache_resource
-def load_pipeline():
-    base_dir = Path(__file__).resolve().parent
-    model_path = base_dir / "model" / "titanic_pipeline.joblib"
-    return joblib.load(model_path)
-
-
-try:
-    pipeline = load_pipeline()
-except Exception as e:
-    st.error(f"Error loading model pipeline: {e}")
-    st.stop()
 
 st.subheader("Passenger Information")
 
@@ -81,37 +59,47 @@ with col2:
 st.markdown("---")
 
 if st.button("Predict Survival Status", type="primary", use_container_width=True):
-    raw_passenger_data = pd.DataFrame(
-        [
-            {
-                "Pclass": pclass,
-                "Name": name,
-                "Sex": sex,
-                "Age": age,
-                "SibSp": sibsp,
-                "Parch": parch,
-                "Ticket": ticket,
-                "Fare": fare,
-                "Cabin": cabin.strip() if cabin.strip() != "" else None,
-                "Embarked": embarked,
-            }
-        ]
-    )
+    payload = {
+        "Pclass": pclass,
+        "Name": name,
+        "Sex": sex,
+        "Age": age,
+        "SibSp": sibsp,
+        "Parch": parch,
+        "Ticket": ticket,
+        "Fare": fare,
+        "Cabin": cabin.strip() if cabin.strip() != "" else None,
+        "Embarked": embarked,
+    }
 
-    prediction = pipeline.predict(raw_passenger_data)[0]
-    probabilities = pipeline.predict_proba(raw_passenger_data)[0]
+    try:
+        with st.spinner("Connecting to FastAPI backend..."):
+            response = requests.post(API_URL, json=payload, timeout=10)
 
-    survival_prob = probabilities[1]
-    perish_prob = probabilities[0]
+        if response.status_code == 200:
+            result = response.json()
+            prediction = result["survived"]
+            survival_prob = result["survival_probability"]
+            perish_prob = 1.0 - survival_prob
 
-    # Render Visual Output
-    st.subheader("Prediction Result")
+            st.subheader("Prediction Result")
 
-    if prediction == 1:
-        st.success(f"### 🎉 Result: Survived!")
-        st.metric(label="Survival Confidence", value=f"{survival_prob:.1%}")
-        st.progress(float(survival_prob))
-    else:
-        st.error(f"### ⚠️ Result: Did Not Survive")
-        st.metric(label="Likelihood of Perishing", value=f"{perish_prob:.1%}")
-        st.progress(float(perish_prob))
+            if prediction == 1:
+                st.success("### 🎉 Result: Survived!")
+                st.metric(label="Survival Confidence", value=f"{survival_prob:.1%}")
+                st.progress(float(survival_prob))
+            else:
+                st.error("### ⚠️ Result: Did Not Survive")
+                st.metric(label="Likelihood of Perishing", value=f"{perish_prob:.1%}")
+                st.progress(float(perish_prob))
+
+        else:
+            st.error(f"⚠️ API Error ({response.status_code}): {response.text}")
+
+    except requests.exceptions.ConnectionError:
+        st.error(
+            "❌ Could not connect to FastAPI backend server. "
+            "Please ensure Uvicorn is running on port 8000 (`uvicorn main:app --reload`)."
+        )
+    except requests.exceptions.Timeout:
+        st.error("⏳ Request timed out. Backend server took too long to respond.")
