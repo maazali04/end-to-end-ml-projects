@@ -2,7 +2,7 @@ import os
 import requests
 import streamlit as st
 
-API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/predict")
+API_URL = "https://titanic-predictor-api-two.vercel.app/predict"
 
 st.set_page_config(
     page_title="Titanic Survival Predictor", page_icon="🚢", layout="centered"
