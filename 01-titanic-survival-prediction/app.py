@@ -2,8 +2,14 @@ import os
 import requests
 import streamlit as st
 
-API_URL = "https://titanic-predictor-api-two.vercel.app/predict"
+import streamlit as st
+import requests
 
+try:
+    API_URL = st.secrets["API_URL"]
+except Exception:
+    API_URL = "https://maazali04-titanic-api.vercel.app/predict"
+    
 st.set_page_config(
     page_title="Titanic Survival Predictor", page_icon="🚢", layout="centered"
 )
